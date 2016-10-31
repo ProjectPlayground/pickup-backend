@@ -31,6 +31,9 @@ mongo.connect(url, (err, db) => {
 
 });
 const app = express();
+
+app.use(express.static('dist'));
+
 //gonna need cors
 app.use(cors());
 app.options('/auth/facebook', cors());
@@ -323,6 +326,7 @@ mongoose.connection.on('error', function(err) {
 //var users = require('./routes/user');
 var updateEvents = () => {
 
+
 request.get({
   url:'https://api.meetup.com/2/open_events?and_text=False&offset=0&city=Nashville&format=json&lon=-86.77878&limited_events=True&state=tn&photo-host=secure&page=150&time=0%2C1w&radius=25&fields=rsvp_sample%2C+rsvp_limit%2Cgroup_photo%2C+event_hosts&category=9%2C32%2C3%2C23%2C5&lat=36.160338&status=upcoming&desc=False&sig_id=104949862&sig=30904a98804562f3a145265b06ed8ce77afb06a3',
   json: true
@@ -330,6 +334,7 @@ request.get({
     if (!err && res.statusCode == 200) {
    console.log("events recieved to meetup"); // Show the HTML for the Google homepage.
  }
+ console.log(body.results.length + " many events recieved");
 
  Event.find({'group':{'join_mode': "approval" || "open"}}).remove((err) =>{
    if (err) {
@@ -344,12 +349,13 @@ if (err) {
 //console.log(events[0]);
 });
 
-   console.log("successfully updated meetup events server!");
 
  });
+
+
 });
 };
-  //  updateEvents();
+    //updateEvents();
 
 
 /*
@@ -368,6 +374,12 @@ app.get('/api/events', (req, res) => {
     console.log(events);
     console.log('Sending Events to User');
     res.send(events);
+
+
+
+
+
+
   });
 });
 
@@ -388,7 +400,8 @@ app.get('/api/events/:id', (req, res) => {
  |--------------------------------------------------------------------------
  */
 app.put('/api/events', (req, res) => {
-  Events.findOneAndUpdate({id : req.body.id}, req.body, {upsert:true}, (err, event) => {
+  Events.findOneAndUpdate({id : req.body.id}
+    , req.body, {upsert:true}, (err, event) => {
     if (err) {
       res.status(400).send({
         message: 'User not found' + err
