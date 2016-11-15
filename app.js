@@ -1,6 +1,5 @@
 const express = require('express');
 const path = require('path');
-//var favicon = require('serve-favicon');
 const logger = require('morgan');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
@@ -53,6 +52,7 @@ var allEventSchema = new mongoose.Schema({
   events: Array,
   userEvents: Array,
 });
+
 var userEventSchema = new mongoose.Schema({
   userEvents: mongoose.Schema.Types.Mixed,
 });
@@ -111,7 +111,7 @@ userSchema.methods.comparePassword = function(password, done) {
 };
 
 var User = mongoose.model('User', userSchema);
-var Event = mongoose.model('Event',  new mongoose.Schema({
+var Event = mongoose.model('Event', new mongoose.Schema({
   "utc_offset": {
     "type": Number
   },
@@ -177,6 +177,15 @@ var Event = mongoose.model('Event',  new mongoose.Schema({
   "how_to_find_us": {
     "type": String
   },
+  "email": {
+    "type": String
+  },
+  "sport": {
+    "type": String
+  },
+  "phone": {
+    "type": String
+  },
   "event_url": {
     "type": String
   },
@@ -192,7 +201,12 @@ var Event = mongoose.model('Event',  new mongoose.Schema({
       "type": Object,
       "member": {
         "type": Object,
-
+        "facebookId": {
+          "type": String
+        },
+        "maybe_going": {
+          "type": Boolean
+        },
         "member_id": {
           "type": Number
         },
@@ -327,35 +341,40 @@ mongoose.connection.on('error', function(err) {
 var updateEvents = () => {
 
 
-request.get({
-  url:'https://api.meetup.com/2/open_events?and_text=False&offset=0&city=Nashville&format=json&lon=-86.77878&limited_events=True&state=tn&photo-host=secure&page=150&time=0%2C1w&radius=25&fields=rsvp_sample%2C+rsvp_limit%2Cgroup_photo%2C+event_hosts&category=9%2C32%2C3%2C23%2C5&lat=36.160338&status=upcoming&desc=False&sig_id=104949862&sig=30904a98804562f3a145265b06ed8ce77afb06a3',
-  json: true
-}, (err, res, body) => {
+  request.get({
+    url: 'https://api.meetup.com/2/open_events?and_text=False&offset=0&city=Nashville&format=json&lon=-86.77878&limited_events=True&state=tn&photo-host=secure&page=150&time=0%2C1w&radius=25&fields=rsvp_sample%2C+rsvp_limit%2Cgroup_photo%2C+event_hosts&category=9%2C32%2C3%2C23%2C5&lat=36.160338&status=upcoming&desc=False&sig_id=104949862&sig=30904a98804562f3a145265b06ed8ce77afb06a3',
+    json: true
+  }, (err, res, body) => {
     if (!err && res.statusCode == 200) {
-   console.log("events recieved to meetup"); // Show the HTML for the Google homepage.
- }
- console.log(body.results.length + " many events recieved");
+      console.log("events recieved to meetup");
+    }
+    console.log(body.results.length + " many events recieved");
 
- Event.find({'group':{'join_mode': "approval" || "open"}}).remove((err) =>{
-   if (err) {
-   return console.log(err);
-   }
-  Event.insertMany(body.results, (err, events) => {
-if (err) {
-  console.error(err);
-}
-//console.log(JSON.stringify(body.results[0]));
+    Event.remove({
+      'group': {
+        'who': {
+          '$ne': 'facebook'
+        }
+      }
+    }, (err) => {
+      if (err) {
+        return console.log(err);
+      }
+      Event.insertMany(body.results, (err, events) => {
+        if (err) {
+          console.error(err);
+        }
+        //console.log(JSON.stringify(body.results[0]));
 
-//console.log(events[0]);
-});
+        //console.log(events[0]);
+      });
 
 
- });
+    });
 
-
-});
+  });
 };
-    //updateEvents();
+//updateEvents();
 
 
 /*
@@ -368,63 +387,139 @@ app.get('/api/events', (req, res) => {
   Event.find({}, (err, events) => {
     if (err) {
       console.error("couldn't get event data");
-      console.log(events);
-
+      //console.log(events);
+      res.status(400).send({
+        err: err,
+        message: 'Error retrieving events'
+      })
     }
-    console.log(events);
+    //console.log(events);
     console.log('Sending Events to User');
-    res.send(events);
-
-
-
-
-
+    res.status(200).send(events);
 
   });
 });
 
 app.get('/api/events/:id', (req, res) => {
-  Event.find({"group":{'id':req.params.id}},(err, events) => {
+  Event.find({
+    "group": {
+      'id': req.params.id
+    }
+  }, (err, events) => {
     if (err) {
       console.error("couldn't get event data");
+      res.status(400).json({
+        err: err,
+        message: 'Error retrieving events for individual user' + req.params.id
+      })
     }
-    console.log('Sending User Profile Events');
-    res.send(events);
+    console.log('Sending User Events');
+    res.status(200).json(events);
   });
 });
 
 
 /*
  |--------------------------------------------------------------------------
- | PUT /api/events
+ | PUT /api/events/:id   join specific event
  |--------------------------------------------------------------------------
  */
-app.put('/api/events', (req, res) => {
-  Events.findOneAndUpdate({id : req.body.id}
-    , req.body, {upsert:true}, (err, event) => {
+app.put('/api/events/:id', (req, res) => {
+
+  Event.update({
+    'id': req.params.id
+  }, {
+    '$addToSet': {
+      'rsvp_sample': req.body
+    }
+  }, (err, event) => {
     if (err) {
-      res.status(400).send({
-        message: 'User not found' + err
+      res.status(400).json({
+        err: err,
+        message: 'could not find user or update! '
       });
     }
-     res.status(200).send("updated user event!");
+    res.status(200).json({
+      message: "updated user event!"
+    });
+  });
+
+});
+
+/*
+ |--------------------------------------------------------------------------
+ | PUT /api/leave/:id leave event
+ |--------------------------------------------------------------------------
+ */
+app.put('/api/leave/:id', (req, res) => {
+
+  Event.findOneAndUpdate({
+    'id': req.params.id
+  }, {
+    $pull: {
+      'rsvp_sample': {
+        'member': {
+          'facebookId': req.body.member.facebookId
+        }
+      }
+    }
+  },{ safe: true }, (err, event) => {
+    console.log(req.body.member.facebookId);
+    if (err) {
+      res.status(400).json({
+        err: err,
+        message: 'could not find user to remove or err with update '
+      });
+    }
+    res.status(200).json({
+      message: "left user event!"
+    });
+  });
+
+});
+
+/*
+ |--------------------------------------------------------------------------
+ | DELETE /api/events/:id  remove event
+ |--------------------------------------------------------------------------
+ */
+app.delete('/api/events/:id', (req, res) => {
+  Event.remove({
+    'id': req.params.id
+  }, (err, event) => {
+    if (err) {
+      res.status(400).json({
+        err: err,
+        message: 'couldnt delete event'
+      });
+    }
+    res.status(200).json({
+      message: "deleted user event!"
+    });
   });
 });
 /*
  |--------------------------------------------------------------------------
- | POST /api/events
+ | POST /api/events create new Event
  |--------------------------------------------------------------------------
  */
 app.post('/api/events', (req, res) => {
-  Events.save(req.body, (err, event) => {
+
+  Event.create(req.body, (err, event) => {
     if (err) {
-      res.status(400).send({
-        message: 'Failed to save new Event' + err
+      console.log(err);
+      res.status(400).json({
+        err: err,
+        message: 'Failed to save new Event'
       });
     }
-      res.status(200).send("created user event!");
+    res.status(200).json({
+      message: "created user event!"
+    });
   });
 });
+
+
 
 app.post('/auth/facebook', cors(), function(req, res) {
   var fields = ['id', 'email', 'first_name', 'last_name', 'link', 'name',
@@ -449,6 +544,7 @@ app.post('/auth/facebook', cors(), function(req, res) {
   }, function(err, response, accessToken) {
     if (response.statusCode !== 200) {
       return res.status(500).send({
+
         message: accessToken.error.message
       });
     }
@@ -499,7 +595,7 @@ app.post('/auth/facebook', cors(), function(req, res) {
             user.displayName = profile.name;
             user.save(function() {
               var token = createJWT(user);
-              res.send({
+              res.status(200).send({
                 token: token,
                 facebook: profile
               });
@@ -513,7 +609,7 @@ app.post('/auth/facebook', cors(), function(req, res) {
         }, function(err, existingUser) {
           if (existingUser) {
             var token = createJWT(existingUser);
-            return res.send({
+            return res.status(200).send({
               token: token,
               facebook: profile
             });
@@ -535,7 +631,7 @@ app.post('/auth/facebook', cors(), function(req, res) {
           user.displayName = profile.name;
           user.save(function() {
             var token = createJWT(user);
-            res.send({
+            res.status(200).send({
               facebook: profile,
               token: token
             });
@@ -592,10 +688,12 @@ function createJWT(user) {
  |--------------------------------------------------------------------------
  */
 app.get('/api/me', function(req, res) {
-  User.find({facebook: req.query.id}, function(err, user) {
-    if (err){
+  User.find({
+    facebook: req.query.id
+  }, function(err, user) {
+    if (err) {
       res.send(err)
-      console.log('error sending use info');
+      console.log('error sending user info');
     }
     console.log('user info send');
     res.send(user);
@@ -608,7 +706,9 @@ app.get('/api/me', function(req, res) {
  |--------------------------------------------------------------------------
  */
 app.put('/api/me', function(req, res) {
-  User.findById({facebook: req.query.id}, function(err, user) {
+  User.findById({
+    facebook: req.query.id
+  }, function(err, user) {
     if (!user) {
       return res.status(400).send({
         message: 'User not found'
@@ -661,14 +761,6 @@ app.locals.ENV = env;
 app.locals.ENV_DEVELOPMENT = env == 'development';
 
 // view engine setup
-
-
-// app.use(favicon(__dirname + '/public/img/favicon.ico'));
-
-//app.use(express.static(path.join(__dirname, 'public')));
-
-//app.use('/', routes);
-//app.use('/users', users);
 
 /// catch 404 and forward to error handler
 app.use(function(req, res, next) {
