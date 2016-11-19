@@ -402,9 +402,7 @@ app.get('/api/events', (req, res) => {
 
 app.get('/api/events/:id', (req, res) => {
   Event.find({
-    "group": {
       'id': req.params.id
-    }
   }, (err, events) => {
     if (err) {
       console.error("couldn't get event data");
@@ -453,18 +451,14 @@ app.put('/api/events/:id', (req, res) => {
  */
 app.put('/api/leave/:id', (req, res) => {
 
-  Event.findOneAndUpdate({
+  Event.update({
     'id': req.params.id
-  }, {
-    $pull: {
-      'rsvp_sample': {
-        'member': {
-          'facebookId': req.body.member.facebookId
-        }
-      }
+  }, { '$set':{
+      'rsvp_sample': req.body
     }
-  },{ safe: true }, (err, event) => {
-    console.log(req.body.member.facebookId);
+
+  }, (err, event) => {
+    //console.log(req.body.member.facebookId);
     if (err) {
       res.status(400).json({
         err: err,
